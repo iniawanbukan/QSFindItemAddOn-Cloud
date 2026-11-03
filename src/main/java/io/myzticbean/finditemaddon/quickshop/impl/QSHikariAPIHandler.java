@@ -480,7 +480,8 @@ public class QSHikariAPIHandler implements QSApi<QuickShopAPI, Shop> {
                             shopIterator.getOwner().getUniqueIdOptional().orElse(new UUID(0, 0)),
                             shopIterator.bukkitLocation(),
                             matchedItem,
-                            toBuy
+                            toBuy,
+                            shopIterator.getShopId()
                     ));
                 }, VirtualThreadScheduler.executor())
                 .exceptionally(ex -> {

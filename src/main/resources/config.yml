@@ -47,8 +47,8 @@ player-shop-teleportation:
     click-to-teleport-message: "&6&lClick to teleport to the shop!"
     shop-tp-no-permission-message: "&cYou don't have permission to teleport to shop!"
     unsafe-shop-area-message: "&cThe area around the shop is unsafe!"
-    tp-delay-in-seconds: 0
-    tp-delay-message: "&6You will be teleported in &c{DELAY} &6seconds..."
+    tp-delay-in-seconds: 3
+    tp-delay-message: "&6Teleporting to the shop in &c{DELAY} &6second(s)..."
     tp-to-own-shop-no-permission-message: "&cYou cannot teleport to your own shop!"
   nearest-warp-tp-mode:
     tp-player-to-nearest-warp: false
@@ -107,4 +107,4 @@ blacklisted-materials:
 shop-search-max-distance: 0
 suppress-update-notifications: false
 debug-mode: false
-config-version: 22
+config-version: 23

@@ -20,6 +20,7 @@ package io.myzticbean.finditemaddon;
 
 import com.tcoded.folialib.FoliaLib;
 import com.tcoded.folialib.impl.PlatformScheduler;
+import io.myzticbean.finditemaddon.commands.QssCommand;
 import io.myzticbean.finditemaddon.commands.simpapi.BuySubCmd;
 import io.myzticbean.finditemaddon.commands.simpapi.DebugSubCmd;
 import io.myzticbean.finditemaddon.commands.simpapi.HideShopSubCmd;
@@ -252,6 +253,16 @@ public final class FindItemAddOn extends JavaPlugin {
         Logger.logInfo("Registering commands");
         initFindItemCmd();
         initFindItemAdminCmd();
+        initQssCmd();
+    }
+
+    private void initQssCmd() {
+        if (getCommand("qss") == null) {
+            Logger.logError("Failed to register /qss command: command is missing from plugin.yml");
+            return;
+        }
+        getCommand("qss").setExecutor(new QssCommand());
+        Logger.logInfo("Registered /qss command");
     }
 
     private void initBukkitEventListeners() {
@@ -259,6 +270,7 @@ public final class FindItemAddOn extends JavaPlugin {
         this.getServer().getPluginManager().registerEvents(new PluginEnableEventListener(), this);
         this.getServer().getPluginManager().registerEvents(new PlayerCommandSendEventListener(), this);
         this.getServer().getPluginManager().registerEvents(new MenuListener(), this);
+        this.getServer().getPluginManager().registerEvents(new QssSignListener(), this);
         this.getServer().getPluginManager().registerEvents(new PlayerJoinEventListener(), this);
         this.getServer().getPluginManager().registerEvents(new PlayerQuitEventListener(), this);
         // QS-Hikari specific event listeners

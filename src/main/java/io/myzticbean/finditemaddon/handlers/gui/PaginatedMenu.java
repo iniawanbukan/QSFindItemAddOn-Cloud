@@ -50,16 +50,12 @@ public abstract class PaginatedMenu extends Menu {
     protected int index = 0;
 
     protected ItemStack backButton;
-    protected ItemStack firstPageButton;
     protected ItemStack nextButton;
-    protected ItemStack lastPageButton;
     protected ItemStack closeInvButton;
 
     protected static final int MAX_ITEMS_PER_PAGE = 45;
     private final String BACK_BUTTON_SKIN_ID = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZjZkYWI3MjcxZjRmZjA0ZDU0NDAyMTkwNjdhMTA5YjVjMGMxZDFlMDFlYzYwMmMwMDIwNDc2ZjdlYjYxMjE4MCJ9fX0=";
-    private final String FIRST_PAGE_BUTTON_SKIN_ID = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOTI5M2E2MDcwNTAzMTcyMDcxZjM1ZjU4YzgyMjA0ZTgxOGNkMDY1MTg2OTAxY2ExOWY3ZGFkYmRhYzE2NWU0NCJ9fX0=";
     private final String NEXT_BUTTON_SKIN_ID = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOGFhMTg3ZmVkZTg4ZGUwMDJjYmQ5MzA1NzVlYjdiYTQ4ZDNiMWEwNmQ5NjFiZGM1MzU4MDA3NTBhZjc2NDkyNiJ9fX0=";
-    private final String LAST_PAGE_BUTTON_SKIN_ID = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMWRhNDRjNzY3Y2NhMjU4NjFkM2E1MmZlMTdjMjY0MjhlNjYwZWUyM2RjMGQ3OTNiZjdiZDg2ZWEyMDJmNzAzZCJ9fX0=";
 
     protected PaginatedMenu(PlayerMenuUtility playerMenuUtility) {
         super(playerMenuUtility);
@@ -74,23 +70,21 @@ public abstract class PaginatedMenu extends Menu {
 
     private void initMaterialsForBottomBar() {
         createGUIBackButton();
-        createGUIFirstPageButton();
         createGUINextButton();
-        createGUILastPageButton();
         createGUICloseInvButton();
     }
 
     public void addMenuBottomBar() {
         inventory.setItem(45, backButton);
-        inventory.setItem(46, firstPageButton);
         inventory.setItem(53, nextButton);
-        inventory.setItem(52, lastPageButton);
         inventory.setItem(49, closeInvButton);
 
+        inventory.setItem(46, super.GUI_FILLER_ITEM);
         inventory.setItem(47, super.GUI_FILLER_ITEM);
         inventory.setItem(48, super.GUI_FILLER_ITEM);
         inventory.setItem(50, super.GUI_FILLER_ITEM);
         inventory.setItem(51, super.GUI_FILLER_ITEM);
+        inventory.setItem(52, super.GUI_FILLER_ITEM);
     }
 
     private void createGUIBackButton() {
@@ -107,22 +101,6 @@ public abstract class PaginatedMenu extends Menu {
                 FindItemAddOn.getConfigProvider().SHOP_GUI_NEXT_BUTTON_TEXT,
                 FindItemAddOn.getConfigProvider().SHOP_GUI_NEXT_BUTTON_CMD,
                 "Next Button");
-    }
-
-    private void createGUIFirstPageButton() {
-        Material mat = Material.getMaterial(FindItemAddOn.getConfigProvider().SHOP_GUI_GOTO_FIRST_PAGE_BUTTON_MATERIAL);
-        firstPageButton = buildNavButton(mat, FIRST_PAGE_BUTTON_SKIN_ID,
-                FindItemAddOn.getConfigProvider().SHOP_GUI_GOTO_FIRST_PAGE_BUTTON_TEXT,
-                FindItemAddOn.getConfigProvider().SHOP_GUI_GOTO_FIRST_PAGE_BUTTON_CMD,
-                "Goto First Page Button");
-    }
-
-    private void createGUILastPageButton() {
-        Material mat = Material.getMaterial(FindItemAddOn.getConfigProvider().SHOP_GUI_GOTO_LAST_PAGE_BUTTON_MATERIAL);
-        lastPageButton = buildNavButton(mat, LAST_PAGE_BUTTON_SKIN_ID,
-                FindItemAddOn.getConfigProvider().SHOP_GUI_GOTO_LAST_PAGE_BUTTON_TEXT,
-                FindItemAddOn.getConfigProvider().SHOP_GUI_GOTO_LAST_PAGE_BUTTON_CMD,
-                "Goto Last Page Button");
     }
 
     private void createGUICloseInvButton() {

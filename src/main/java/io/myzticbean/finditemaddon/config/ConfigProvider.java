@@ -70,7 +70,8 @@ public class ConfigProvider {
     public final String CLICK_TO_TELEPORT_MSG = ConfigSetup.get().getString(PLAYER_SHOP_TELEPORTATION + DIRECT_SHOP_TP_MODE + "click-to-teleport-message");
     public final String SHOP_TP_NO_PERMISSION_MSG = ConfigSetup.get().getString(PLAYER_SHOP_TELEPORTATION + DIRECT_SHOP_TP_MODE + "shop-tp-no-permission-message");
     public final String UNSAFE_SHOP_AREA_MSG = ConfigSetup.get().getString(PLAYER_SHOP_TELEPORTATION + DIRECT_SHOP_TP_MODE + "unsafe-shop-area-message");
-    public final String TP_DELAY_IN_SECONDS = ConfigSetup.get().getString(PLAYER_SHOP_TELEPORTATION + DIRECT_SHOP_TP_MODE + "tp-delay-in-seconds");
+    public final int TP_DELAY_IN_SECONDS = Math.max(0, ConfigSetup.get().getInt(
+            PLAYER_SHOP_TELEPORTATION + DIRECT_SHOP_TP_MODE + "tp-delay-in-seconds", 3));
     public final String TP_DELAY_MESSAGE = ConfigSetup.get().getString(PLAYER_SHOP_TELEPORTATION + DIRECT_SHOP_TP_MODE + "tp-delay-message");
     public final String TP_TO_OWN_SHOP_NO_PERMISSION_MESSAGE = ConfigSetup.get().getString(PLAYER_SHOP_TELEPORTATION + DIRECT_SHOP_TP_MODE + "tp-to-own-shop-no-permission-message");
     public final boolean TP_PLAYER_TO_NEAREST_WARP = ConfigSetup.get().getBoolean(PLAYER_SHOP_TELEPORTATION + NEAREST_WARP_TP_MODE + "tp-player-to-nearest-warp");

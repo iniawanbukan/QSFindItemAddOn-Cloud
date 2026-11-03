@@ -18,7 +18,6 @@
  */
 package io.myzticbean.finditemaddon.models;
 
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.bukkit.Location;
 import org.bukkit.inventory.ItemStack;
@@ -30,7 +29,6 @@ import java.util.UUID;
  * @author myzticbean
  */
 @Getter
-@AllArgsConstructor
 public class FoundShopItemModel {
     private final double shopPrice;
     private final int remainingStockOrSpace;
@@ -38,4 +36,26 @@ public class FoundShopItemModel {
     private final Location shopLocation;
     private final ItemStack item;
     private final boolean toBuy;
+    /**
+     * QuickShop's internal shop id. Higher ids are created later, which lets the
+     * QSS item browser offer a "recently listed" ordering. {@code 0} means the
+     * id is unknown (for example when a shop implementation cannot expose it).
+     */
+    private final long shopId;
+
+    public FoundShopItemModel(double shopPrice, int remainingStockOrSpace, UUID shopOwner,
+                              Location shopLocation, ItemStack item, boolean toBuy) {
+        this(shopPrice, remainingStockOrSpace, shopOwner, shopLocation, item, toBuy, 0L);
+    }
+
+    public FoundShopItemModel(double shopPrice, int remainingStockOrSpace, UUID shopOwner,
+                              Location shopLocation, ItemStack item, boolean toBuy, long shopId) {
+        this.shopPrice = shopPrice;
+        this.remainingStockOrSpace = remainingStockOrSpace;
+        this.shopOwner = shopOwner;
+        this.shopLocation = shopLocation;
+        this.item = item;
+        this.toBuy = toBuy;
+        this.shopId = shopId;
+    }
 }

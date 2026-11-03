@@ -86,7 +86,7 @@ public class PlayerWarpsUtil {
     }
 
     /**
-     * Issue #24 Fix: Extracted method from FoundShopsMenu class
+     * Issue #24 Fix: Extracted method from the shop GUI class
      * @param player
      * @param warpName
      */

@@ -20,8 +20,7 @@ package io.myzticbean.finditemaddon.handlers.command;
 
 import io.myzticbean.finditemaddon.FindItemAddOn;
 import io.myzticbean.finditemaddon.config.ConfigSetup;
-import io.myzticbean.finditemaddon.handlers.gui.menus.FoundShopsMenu;
-import io.myzticbean.finditemaddon.models.FoundShopItemModel;
+import io.myzticbean.finditemaddon.handlers.gui.qss.QssSessionManager;
 import io.myzticbean.finditemaddon.models.enums.PlayerPermsEnum;
 import io.myzticbean.finditemaddon.quickshop.impl.QSHikariAPIHandler;
 import io.myzticbean.finditemaddon.utils.PlayerUtil;
@@ -34,8 +33,7 @@ import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
-import java.util.List;
+import java.util.Locale;
 
 /**
  * Handler for different parameters of /finditem command
@@ -45,7 +43,6 @@ public class CmdExecutorHandler {
 
     private static final String THIS_COMMAND_CAN_ONLY_BE_RUN_FROM_IN_GAME = "This command can only be run from in game";
     public static final String NO_PERMISSION = "&cNo permission!";
-    private static final String SEARCH_ERROR_MSG = "&cAn error occurred while searching for shops. Please try again or contact an admin.";
 
     /**
      * Handles the main shop search process
@@ -64,11 +61,6 @@ public class CmdExecutorHandler {
                 return;
             }
 
-            // Show searching... message
-            if (!StringUtils.isEmpty(FindItemAddOn.getConfigProvider().SHOP_SEARCH_LOADING_MSG)) {
-                PlayerUtil.sendMessage(player, getPluginPrefix() + FindItemAddOn.getConfigProvider().SHOP_SEARCH_LOADING_MSG);
-            }
-
             boolean isBuying;
             if(StringUtils.isEmpty(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_BUY_AUTOCOMPLETE)
                     || StringUtils.containsIgnoreCase(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_BUY_AUTOCOMPLETE, " ")) {
@@ -77,62 +69,26 @@ public class CmdExecutorHandler {
                 isBuying = buySellSubCommand.equalsIgnoreCase(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_BUY_AUTOCOMPLETE);
             }
 
-            if(itemArg.equalsIgnoreCase("*") && !FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_DISABLE_SEARCH_ALL_SHOPS) {
-                // If QS Hikari installed and Shop Cache feature available (>6), then run in async thread (Fix for Issue #12)
-                // UPDATE: No need to run in async thread as it is already running in async thread (Assume everyone has QS-Hikari v6.* installed)
-                FindItemAddOn
-                        .getQsApiInstance()
-                        .fetchAllItemsFromAllShops(isBuying, player)
-                        .thenAccept(searchResultList -> this.openShopMenu(player, searchResultList, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG))
-                        .exceptionally(ex -> this.handleShopSearchError(player, ex));
-            } else {
-                Material mat = Material.getMaterial(itemArg.toUpperCase());
-                if(this.checkMaterialBlacklist(mat)) {
-                    PlayerUtil.sendMessage(player, getPluginPrefix() + "&cThis material is not allowed.");
+            if(itemArg.equalsIgnoreCase("*")) {
+                if (FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_DISABLE_SEARCH_ALL_SHOPS) {
+                    PlayerUtil.sendMessage(player, getPluginPrefix()
+                            + FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_INVALID_MATERIAL_MSG);
                     return;
                 }
-                if (mat != null && mat.isItem()) {
-                    Logger.logDebugInfo("Material found: " + mat);
-                    // If QS Hikari installed and Shop Cache feature available (>6), then run in async thread (Fix for Issue #12)
-                    // UPDATE: No need to run in async thread as it is already running in async thread (Assume everyone has QS-Hikari v6.* installed)
-                    FindItemAddOn
-                            .getQsApiInstance()
-                            .findItemBasedOnTypeFromAllShops(new ItemStack(mat), isBuying, player)
-                            .thenAccept(searchResultList -> this.openShopMenu(player, searchResultList, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG))
-                            .exceptionally(ex -> this.handleShopSearchError(player, ex));
-                } else {
-                    Logger.logDebugInfo("Material not found! Performing query based search..");
-                    // If QS Hikari installed and Shop Cache feature available (>6), then run in async thread (Fix for Issue #12)
-                    // UPDATE: No need to run in async thread as it is already running in async thread (Assume everyone has QS-Hikari v6.* installed)
-                    FindItemAddOn
-                            .getQsApiInstance()
-                            .findItemBasedOnDisplayNameFromAllShops(itemArg, isBuying, player)
-                            .thenAccept(searchResultList -> this.openShopMenu(player, searchResultList, FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_INVALID_MATERIAL_MSG))
-                            .exceptionally(ex -> this.handleShopSearchError(player, ex));
-                }
+                QssSessionManager.openFromFindItem(player, isBuying, "*");
+                return;
             }
+
+            Material mat = Material.getMaterial(itemArg.toUpperCase(Locale.ROOT));
+            if(mat != null && this.checkMaterialBlacklist(mat)) {
+                PlayerUtil.sendMessage(player, getPluginPrefix() + "&cThis material is not allowed.");
+                return;
+            }
+
+            // Both exact materials and free-text searches now open the same
+            // /qss shop browser, so there is only one result GUI to maintain.
+            QssSessionManager.openFromFindItem(player, isBuying, itemArg);
         });
-    }
-
-    private Void handleShopSearchError(Player player, Throwable ex) {
-        Throwable cause = ex;
-        while (cause instanceof java.util.concurrent.CompletionException && cause.getCause() != null) {
-            cause = cause.getCause();
-        }
-        Logger.logError("Shop search failed for player " + player.getName() + ": " + cause.getMessage());
-        PlayerUtil.sendMessage(player, getPluginPrefix() + SEARCH_ERROR_MSG);
-        return null;
-    }
-
-    private void openShopMenu(Player player, List<FoundShopItemModel> searchResultList, String errorMsg) {
-        if (!searchResultList.isEmpty()) {
-            FoundShopsMenu menu = new FoundShopsMenu(FindItemAddOn.getPlayerMenuUtility(player), searchResultList);
-            menu.open(searchResultList);
-        } else {
-            if (!StringUtils.isEmpty(errorMsg)) {
-                PlayerUtil.sendMessage(player, getPluginPrefix() + errorMsg);
-            }
-        }
     }
 
     private boolean checkMaterialBlacklist(Material mat) {

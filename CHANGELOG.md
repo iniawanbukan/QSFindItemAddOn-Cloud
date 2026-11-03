@@ -1,4 +1,4 @@
-## Release 2.0.8.2
+## Release 2.0.8.3 Unofficial
 
 ### What's new for server owners
 - **Noticeably faster searches on large servers** — the shop list sync that runs every 15 minutes (and on startup) has been rewritten to scale linearly instead of getting slower the more shops your server has. Servers with thousands of shops will see a significant drop in that sync time.

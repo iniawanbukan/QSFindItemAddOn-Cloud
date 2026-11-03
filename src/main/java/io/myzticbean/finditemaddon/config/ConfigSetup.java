@@ -42,7 +42,7 @@ public class ConfigSetup {
     private static File sampleConfigFile;
     private static FileConfiguration configFileConfiguration;
     @Getter
-    private static final int CURRENT_CONFIG_VERSION = 22;
+    private static final int CURRENT_CONFIG_VERSION = 23;
 
     public static void setupConfig() {
         configFile = new File(FindItemAddOn.getInstance().getDataFolder(), "config.yml");
@@ -325,6 +325,18 @@ public class ConfigSetup {
             // Config 22
             if(configFileConfiguration.getInt("config-version") < 22) {
                 configFileConfiguration.set("shop-search-max-distance", 0);
+            }
+
+            // Config 23
+            if(configFileConfiguration.getInt("config-version") < 23) {
+                // Enable the visible 3-second teleport countdown by default.
+                // Keep an explicit non-zero value if the server already uses one.
+                int delay = configFileConfiguration.getInt(
+                        "player-shop-teleportation.direct-shop-tp-mode.tp-delay-in-seconds", 0);
+                if (delay <= 0) {
+                    configFileConfiguration.set(
+                            "player-shop-teleportation.direct-shop-tp-mode.tp-delay-in-seconds", 3);
+                }
             }
 
             // AT LAST

@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package io.myzticbean.finditemaddon.handlers.gui.menus;
+package io.myzticbean.finditemaddon.handlers.gui.qss;
 
 import com.bekvon.bukkit.residence.protection.ClaimedResidence;
 import com.olziedev.playerwarps.api.warp.Warp;
@@ -31,6 +31,9 @@ import io.myzticbean.finditemaddon.handlers.gui.PlayerMenuUtility;
 import io.myzticbean.finditemaddon.models.FoundShopItemModel;
 import io.myzticbean.finditemaddon.models.enums.CustomCmdPlaceholdersEnum;
 import io.myzticbean.finditemaddon.models.enums.PlayerPermsEnum;
+import io.myzticbean.finditemaddon.models.enums.QssCategory;
+import io.myzticbean.finditemaddon.models.enums.QssSide;
+import io.myzticbean.finditemaddon.models.enums.QssSortMode;
 import io.myzticbean.finditemaddon.models.enums.ShopLorePlaceholdersEnum;
 import io.myzticbean.finditemaddon.utils.PlayerUtil;
 import io.myzticbean.finditemaddon.utils.async.VirtualThreadScheduler;
@@ -51,6 +54,7 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
@@ -59,34 +63,62 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Handler class for FoundShops GUI
- * 
+ * Main GUI for the /qss command and /finditem searches. Every entry is one
+ * QuickShop shop, so two shops selling the same item (even from the same owner)
+ * are listed separately. Left-clicking an entry teleports the player directly
+ * to that shop.
+ * <p>
+ * The top row holds the sort, side, category and search controls; the middle
+ * rows hold the shops; the bottom row holds previous/next/close.
+ *
  * @author myzticbean
  */
-public class FoundShopsMenu extends PaginatedMenu {
+public class Menu extends PaginatedMenu {
 
     public static final String SHOP_STOCK_UNLIMITED = "Unlimited";
     public static final String SHOP_STOCK_UNKNOWN = "Unknown";
-    private static final String NAMEDSPACE_KEY_LOCATION_DATA = "locationData";
-    private final ConfigProvider configProvider;
 
-    public FoundShopsMenu(PlayerMenuUtility playerMenuUtility, List<FoundShopItemModel> searchResult) {
-        super(playerMenuUtility, searchResult);
-        configProvider = FindItemAddOn.getConfigProvider();
+    private static final String NAMEDSPACE_KEY_LOCATION_DATA = "locationData";
+    private static final int SHOPS_PER_PAGE = 36;
+    private static final int SHOP_SLOT_START = 9;
+    private static final int SHOP_SLOT_END = 44;
+
+    private static final int SLOT_SORT = 0;
+    private static final int SLOT_SIDE = 2;
+    private static final int SLOT_CATEGORY = 4;
+    private static final int SLOT_SEARCH = 8;
+
+    private static final int SLOT_PREVIOUS = 45;
+    private static final int SLOT_PAGE_INFO = 48;
+    private static final int SLOT_CLOSE = 49;
+    private static final int SLOT_NEXT = 53;
+
+    private final ConfigProvider configProvider;
+    private final QssSession session;
+
+    public Menu(PlayerMenuUtility playerMenuUtility, QssSession session) {
+        super(playerMenuUtility);
+        this.configProvider = FindItemAddOn.getConfigProvider();
+        this.session = session;
+    }
+
+    public void open() {
+        super.open(Collections.emptyList());
     }
 
     @Override
     public String getMenuName() {
-        if (!StringUtils.isEmpty(configProvider.SHOP_SEARCH_GUI_TITLE)) {
-            return ColorTranslator.translateColorCodes(configProvider.SHOP_SEARCH_GUI_TITLE);
-        } else {
-            return ColorTranslator.translateColorCodes("&l» &rShops");
-        }
+        String title = StringUtils.isEmpty(configProvider.SHOP_SEARCH_GUI_TITLE)
+                ? "&l» &rQuickShop Shops"
+                : configProvider.SHOP_SEARCH_GUI_TITLE;
+        return ColorTranslator.translateColorCodes(title + " &7(" + session.getSide().getDisplayName() + ")");
     }
 
     @Override
@@ -95,69 +127,222 @@ public class FoundShopsMenu extends PaginatedMenu {
     }
 
     @Override
+    public void setMenuItems(List<FoundShopItemModel> ignored) {
+        List<FoundShopItemModel> visibleShops = session.getVisibleShops();
+        int pageCount = getPageCount(visibleShops.size());
+        int page = Math.max(0, Math.min(session.getPage(), pageCount - 1));
+        session.setPage(page);
+
+        addTopBar(visibleShops.size());
+        addShopEntries(visibleShops, page);
+        addBottomBar(visibleShops.size(), page, pageCount);
+    }
+
+    private void addTopBar(int visibleShopCount) {
+        for (int slot = 0; slot < 9; slot++) {
+            inventory.setItem(slot, GUI_FILLER_ITEM);
+        }
+        inventory.setItem(SLOT_SORT, buildSortItem());
+        inventory.setItem(SLOT_SIDE, buildSideItem());
+        inventory.setItem(SLOT_CATEGORY, buildCategoryItem());
+        inventory.setItem(SLOT_SEARCH, buildSearchItem(visibleShopCount));
+    }
+
+    private void addShopEntries(List<FoundShopItemModel> visibleShops, int page) {
+        int startIndex = page * SHOPS_PER_PAGE;
+        for (int i = 0; i < SHOPS_PER_PAGE; i++) {
+            int index = startIndex + i;
+            if (index >= visibleShops.size()) {
+                break;
+            }
+
+            FoundShopItemModel foundShop = visibleShops.get(index);
+            if (foundShop == null) {
+                continue;
+            }
+
+            // Use setItem so identical shop items never merge into one stack.
+            // Every shop stays visible in its own slot with its own location.
+            inventory.setItem(SHOP_SLOT_START + i, createShopItem(foundShop));
+        }
+    }
+
+    private void addBottomBar(int visibleShopCount, int page, int pageCount) {
+        for (int slot = 45; slot < 54; slot++) {
+            inventory.setItem(slot, GUI_FILLER_ITEM);
+        }
+
+        inventory.setItem(SLOT_PREVIOUS, buildItem(Material.ARROW, "&c« Previous Page",
+                List.of("&7Go to the previous page")));
+        inventory.setItem(SLOT_PAGE_INFO, buildPageInfo(visibleShopCount, page, pageCount));
+        inventory.setItem(SLOT_CLOSE, buildItem(Material.BARRIER, "&fClose",
+                List.of("&7Close the shop browser")));
+        inventory.setItem(SLOT_NEXT, buildItem(Material.ARROW, "&aNext Page »",
+                List.of("&7Go to the next page")));
+    }
+
+    private ItemStack buildSortItem() {
+        QssSortMode sortMode = session.getSortMode();
+        List<String> lore = new ArrayList<>();
+        lore.add("&7Current: &f" + sortMode.getDisplayName());
+        if (sortMode == QssSortMode.BEST_PRICE) {
+            lore.add(session.getSide() == QssSide.TO_SELL
+                    ? "&7Highest price first &8(shops pay more)"
+                    : "&7Lowest price first &8(you pay less)");
+        }
+        lore.add("");
+        lore.add("&aLeft-click &7- next sort");
+        lore.add("&cRight-click &7- previous sort");
+        return buildItem(sortMode.getIcon(), "&6&lSort: &e" + sortMode.getDisplayName(), lore);
+    }
+
+    private ItemStack buildSideItem() {
+        QssSide side = session.getSide();
+        return buildItem(side.getIcon(), "&6&lShops: &e" + side.getDisplayName(),
+                List.of(
+                        "&7Current: &f" + side.getDisplayName(),
+                        "&7" + side.getDescription(),
+                        "",
+                        "&aLeft-click &7- switch side",
+                        "&cRight-click &7- switch side"
+                ));
+    }
+
+    private ItemStack buildCategoryItem() {
+        QssCategory category = session.getCategory();
+        return buildItem(category.getIcon(), "&6&lCategory: &e" + category.getDisplayName(),
+                List.of(
+                        "&7Current: &f" + category.getDisplayName(),
+                        "",
+                        "&aLeft-click &7- next category",
+                        "&cRight-click &7- previous category"
+                ));
+    }
+
+    private ItemStack buildSearchItem(int visibleShopCount) {
+        String query;
+        if (session.getMaterialFilter() != null) {
+            query = prettify(session.getMaterialFilter()) + " &7(exact item)";
+        } else {
+            query = StringUtils.isEmpty(session.getSearchQuery()) ? "None" : session.getSearchQuery();
+        }
+        return buildItem(Material.OAK_SIGN, "&6&lSearch",
+                List.of(
+                        "&7Current: &f" + query,
+                        "&7Matching shops: &f" + visibleShopCount,
+                        "",
+                        "&aLeft-click &7- enter search on a sign",
+                        "&cRight-click &7- clear search"
+                ));
+    }
+
+    private ItemStack buildPageInfo(int visibleShopCount, int page, int pageCount) {
+        String query;
+        if (session.getMaterialFilter() != null) {
+            query = prettify(session.getMaterialFilter()) + " (exact)";
+        } else {
+            query = StringUtils.isEmpty(session.getSearchQuery()) ? "None" : session.getSearchQuery();
+        }
+        return buildItem(Material.PAPER, "&ePage &f" + (page + 1) + " &7/ &f" + pageCount,
+                List.of(
+                        "&7Shops: &f" + visibleShopCount,
+                        "&7Side: &f" + session.getSide().getDisplayName(),
+                        "&7Sort: &f" + session.getSortMode().getDisplayName(),
+                        "&7Category: &f" + session.getCategory().getDisplayName(),
+                        "&7Search: &f" + query
+                ));
+    }
+
+    @Override
     public void handleMenu(@NotNull InventoryClickEvent event) {
         int slot = event.getSlot();
         Player player = (Player) event.getWhoClicked();
+        boolean leftClick = event.isLeftClick();
+        boolean rightClick = event.isRightClick();
 
-        // Handle navigation buttons (prev, next, first, last page)
-        if (handleNavigationClick(event, slot)) {
+        if (slot == SLOT_SORT) {
+            if (leftClick || rightClick) {
+                session.cycleSort(leftClick);
+                open();
+            }
             return;
         }
 
-        // Close inventory if the close button (slot 49) is clicked
-        if (slot == 49) {
+        if (slot == SLOT_SIDE) {
+            if (leftClick || rightClick) {
+                session.cycleSide(leftClick);
+                QssSessionManager.ensureLoadedAndOpen(player, session);
+            }
+            return;
+        }
+
+        if (slot == SLOT_CATEGORY) {
+            if (leftClick || rightClick) {
+                session.cycleCategory(leftClick);
+                open();
+            }
+            return;
+        }
+
+        if (slot == SLOT_SEARCH) {
+            if (leftClick) {
+                QssSignInput.open(player);
+            } else if (rightClick) {
+                session.clearSearch();
+                open();
+            }
+            return;
+        }
+
+        if (slot == SLOT_PREVIOUS) {
+            if (session.getPage() > 0) {
+                session.setPage(session.getPage() - 1);
+                open();
+            } else {
+                sendFirstPageAlert(player);
+            }
+            return;
+        }
+
+        if (slot == SLOT_NEXT) {
+            if (session.getPage() + 1 < getPageCount(session.getVisibleShops().size())) {
+                session.setPage(session.getPage() + 1);
+                open();
+            } else {
+                sendLastPageAlert(player);
+            }
+            return;
+        }
+
+        if (slot == SLOT_CLOSE) {
             player.closeInventory();
             return;
         }
 
-        // Ignore clicks on empty slots
-        if (event.getCurrentItem().getType().equals(Material.AIR)) {
-            Logger.logDebugInfo(player.getName() + " just clicked on AIR!");
-            return;
+        if (slot >= SHOP_SLOT_START && slot <= SHOP_SLOT_END) {
+            ItemStack current = event.getCurrentItem();
+            if (current == null || current.getType().isAir()) {
+                return;
+            }
+            handleShopItemClick(event, player);
         }
-
-        // Handle clicks on shop items
-        handleShopItemClick(event, player);
     }
 
     /**
-     * Handles clicks on navigation buttons
-     * 
-     * @param event The InventoryClickEvent
-     * @param slot  The clicked slot number
-     * @return true if a navigation button was clicked, false otherwise
-     */
-    private boolean handleNavigationClick(InventoryClickEvent event, int slot) {
-        return switch (slot) {
-            case 45 -> {
-                handleMenuClickForNavToPrevPage(event);
-                yield true;
-            }
-            case 46 -> {
-                handleFirstPageClick(event);
-                yield true;
-            }
-            case 52 -> {
-                handleLastPageClick(event);
-                yield true;
-            }
-            case 53 -> {
-                handleMenuClickForNavToNextPage(event);
-                yield true;
-            }
-            default -> false;
-        };
-    }
-
-    /**
-     * Handles clicks on shop items in the inventory
-     * 
+     * Handles clicks on shop items in the inventory.
+     *
      * @param event  The InventoryClickEvent
      * @param player The player who clicked
      */
     private void handleShopItemClick(@NotNull InventoryClickEvent event, Player player) {
         ItemStack item = event.getCurrentItem();
+        if (item == null) {
+            return;
+        }
         ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return;
+        }
         NamespacedKey key = new NamespacedKey(FindItemAddOn.getInstance(), NAMEDSPACE_KEY_LOCATION_DATA);
 
         // Check if the item has the required location data
@@ -169,7 +354,7 @@ public class FoundShopsMenu extends PaginatedMenu {
         String locData = meta.getPersistentDataContainer().get(key, PersistentDataType.STRING);
         List<String> locDataList = Arrays.asList(locData.split("\\s*\\|\\|\\|\\s*"));
 
-        // Parse location once — reused by TP and custom commands
+        // Parse location once - reused by TP and custom commands
         Location shopLocation = locDataList.size() >= 4 ? parseShopLocation(locDataList) : null;
 
         // Handle direct teleportation to shop
@@ -220,9 +405,9 @@ public class FoundShopsMenu extends PaginatedMenu {
                 if (EssentialsXPlugin.isEnabled())
                     EssentialsXPlugin.setLastLocation(player);
 
-                // Apply teleport delay if necessary, otherwise teleport immediately
-                if (shouldApplyTeleportDelay(player)) {
-                    applyTeleportDelay(player, locToTeleport);
+                // Apply the teleport countdown if necessary, otherwise teleport immediately
+                if (shouldApplyTeleportCountdown(player)) {
+                    applyTeleportCountdown(player, locToTeleport);
                 } else {
                     PlayerUtil.teleport(player, locToTeleport);
                 }
@@ -232,7 +417,7 @@ public class FoundShopsMenu extends PaginatedMenu {
 
     /**
      * Handles teleportation to the nearest warp
-     * 
+     *
      * @param player   The player to teleport
      * @param warpName The name of the warp
      */
@@ -267,7 +452,7 @@ public class FoundShopsMenu extends PaginatedMenu {
 
     /**
      * Parses location data into a Bukkit Location
-     * 
+     *
      * @param locDataList List containing location data
      * @return A Bukkit Location, or null if parsing fails
      */
@@ -294,7 +479,7 @@ public class FoundShopsMenu extends PaginatedMenu {
 
     /**
      * Sends a no permission message to the player
-     * 
+     *
      * @param player The player to send the message to
      */
     private void sendNoPermissionMessage(Player player) {
@@ -305,7 +490,7 @@ public class FoundShopsMenu extends PaginatedMenu {
 
     /**
      * Sends an unsafe area message to the player
-     * 
+     *
      * @param player The player to send the message to
      */
     private void sendUnsafeAreaMessage(Player player) {
@@ -315,145 +500,53 @@ public class FoundShopsMenu extends PaginatedMenu {
     }
 
     /**
-     * Checks if a teleport delay should be applied
-     * 
+     * Checks if a teleport countdown should be applied. Players with
+     * {@code finditem.shoptp-delay.bypass} (or {@code finditem.admin}) teleport
+     * immediately.
+     *
      * @param player The player to check
-     * @return true if a delay should be applied, false otherwise
+     * @return true if a countdown should be applied, false otherwise
      */
-    private boolean shouldApplyTeleportDelay(Player player) {
-        return StringUtils.isNumeric(configProvider.TP_DELAY_IN_SECONDS)
-                && !"0".equals(configProvider.TP_DELAY_IN_SECONDS)
+    private boolean shouldApplyTeleportCountdown(Player player) {
+        return configProvider.TP_DELAY_IN_SECONDS > 0
                 && !PlayerPermsEnum.hasShopTpDelayBypassPermOrAdmin(player);
     }
 
     /**
-     * Applies a teleport delay and sends a message to the player
-     * 
-     * @param player        The player to apply the delay to
-     * @param locToTeleport The location to teleport to after the delay
+     * Starts the teleport countdown, sending one message per remaining second.
+     *
+     * @param player        The player to apply the countdown to
+     * @param locToTeleport The location to teleport to after the countdown
      */
-    private void applyTeleportDelay(Player player, Location locToTeleport) {
-        long delay = Long.parseLong(configProvider.TP_DELAY_IN_SECONDS);
-        Logger.logDebugInfo("Teleporting delay is set to: " + delay);
-        String tpDelayMsg = configProvider.TP_DELAY_MESSAGE;
-        if (!StringUtils.isEmpty(tpDelayMsg)) {
-            PlayerUtil.sendMessage(player, configProvider.PLUGIN_PREFIX + replaceDelayPlaceholder(tpDelayMsg, delay));
-        }
-        FindItemAddOn.getScheduler().runLaterAsync(
-                () -> PlayerUtil.teleport(player, locToTeleport),
-                delay * 20);
+    private void applyTeleportCountdown(Player player, Location locToTeleport) {
+        int seconds = configProvider.TP_DELAY_IN_SECONDS;
+        Logger.logDebugInfo("Teleport countdown is set to: " + seconds);
+        scheduleTeleportCountdown(player, locToTeleport, seconds);
     }
 
-    /**
-     * Handles navigation to the next page
-     * 
-     * @param event The InventoryClickEvent
-     */
-    private void handleMenuClickForNavToNextPage(InventoryClickEvent event) {
-        if (!((index + 1) >= super.playerMenuUtility.getPlayerShopSearchResult().size())) {
-            page = page + 1;
-            super.open(super.playerMenuUtility.getPlayerShopSearchResult());
-        } else {
-            if (!StringUtils.isEmpty(configProvider.SHOP_NAV_LAST_PAGE_ALERT_MSG)) {
-                PlayerUtil.sendMessage(event.getWhoClicked(), configProvider.PLUGIN_PREFIX + configProvider.SHOP_NAV_LAST_PAGE_ALERT_MSG);
-            }
+    private void scheduleTeleportCountdown(Player player, Location locToTeleport, int secondsLeft) {
+        if (!player.isOnline()) {
+            return;
         }
-    }
-
-    /**
-     * Handles navigation to the previous page
-     * 
-     * @param event The InventoryClickEvent
-     */
-    private void handleMenuClickForNavToPrevPage(InventoryClickEvent event) {
-        if (page == 0) {
-            if (!StringUtils.isEmpty(configProvider.SHOP_NAV_FIRST_PAGE_ALERT_MSG)) {
-                PlayerUtil.sendMessage(event.getWhoClicked(), configProvider.PLUGIN_PREFIX + configProvider.SHOP_NAV_FIRST_PAGE_ALERT_MSG);
-            }
-        } else {
-            page = page - 1;
-            super.open(super.playerMenuUtility.getPlayerShopSearchResult());
-        }
-    }
-
-    /**
-     * Handles navigation to the first page
-     * 
-     * @param event The InventoryClickEvent
-     */
-    private void handleFirstPageClick(InventoryClickEvent event) {
-        if (page == 0) {
-            if (!StringUtils.isEmpty(configProvider.SHOP_NAV_FIRST_PAGE_ALERT_MSG)) {
-                PlayerUtil.sendMessage(event.getWhoClicked(), configProvider.PLUGIN_PREFIX + configProvider.SHOP_NAV_FIRST_PAGE_ALERT_MSG);
-            }
-        } else {
-            page = 0;
-            super.open(super.playerMenuUtility.getPlayerShopSearchResult());
-        }
-    }
-
-    /**
-     * Handles navigation to the last page
-     * 
-     * @param event The InventoryClickEvent
-     */
-    private void handleLastPageClick(InventoryClickEvent event) {
-        int listSize = super.playerMenuUtility.getPlayerShopSearchResult().size();
-        if (!((index + 1) >= listSize)) {
-            double totalPages = listSize / MAX_ITEMS_PER_PAGE;
-            if (totalPages % 10 == 0) {
-                page = (int) Math.floor(totalPages);
-                Logger.logDebugInfo("Floor page value: " + page);
-            } else {
-                page = (int) Math.ceil(totalPages);
-                Logger.logDebugInfo("Ceiling page value: " + page);
-            }
-            super.open(super.playerMenuUtility.getPlayerShopSearchResult());
-        } else {
-            if (!StringUtils.isEmpty(configProvider.SHOP_NAV_LAST_PAGE_ALERT_MSG)) {
-                PlayerUtil.sendMessage(event.getWhoClicked(), configProvider.PLUGIN_PREFIX + configProvider.SHOP_NAV_LAST_PAGE_ALERT_MSG);
-            }
-        }
-    }
-
-    /**
-     * Sets the slots in the search result GUI
-     * 
-     * @param foundShops List of found shops
-     */
-    @Override
-    public void setMenuItems(List<FoundShopItemModel> foundShops) {
-        // Add the bottom navigation bar to the menu
-        addMenuBottomBar();
-
-        // If no shops were found, return early
-        if (foundShops == null || foundShops.isEmpty()) {
+        if (secondsLeft <= 0) {
+            PlayerUtil.teleport(player, locToTeleport);
             return;
         }
 
-        int maxItemsPerPage = MAX_ITEMS_PER_PAGE;
-        // Iterate through the slots for this page
-        for (int guiSlotCounter = 0; guiSlotCounter < maxItemsPerPage; guiSlotCounter++) {
-            // Calculate the index in the foundShops list for the current slot
-            index = maxItemsPerPage * page + guiSlotCounter;
-            if (index >= foundShops.size()) {
-                break;
-            }
-
-            FoundShopItemModel foundShop = foundShops.get(index);
-            if (foundShop == null) {
-                continue;
-            }
-
-            // Create an ItemStack for the shop and add it to the inventory
-            ItemStack item = createShopItem(foundShop);
-            inventory.addItem(item);
+        String tpDelayMsg = configProvider.TP_DELAY_MESSAGE;
+        if (!StringUtils.isEmpty(tpDelayMsg)) {
+            PlayerUtil.sendMessage(player, configProvider.PLUGIN_PREFIX
+                    + replaceDelayPlaceholder(tpDelayMsg, secondsLeft));
         }
+
+        FindItemAddOn.getScheduler().runLaterAsync(
+                () -> scheduleTeleportCountdown(player, locToTeleport, secondsLeft - 1),
+                20);
     }
 
     /**
      * Creates an ItemStack representing a shop
-     * 
+     *
      * @param foundShop The shop to create an item for
      * @return An ItemStack representing the shop
      */
@@ -463,6 +556,9 @@ public class FoundShopsMenu extends PaginatedMenu {
         ItemMeta meta = foundShop.getItem().getItemMeta();
         if (meta == null) {
             meta = Bukkit.getItemFactory().getItemMeta(item.getType());
+        }
+        if (meta == null) {
+            return item;
         }
 
         List<String> lore = new ArrayList<>();
@@ -474,7 +570,7 @@ public class FoundShopsMenu extends PaginatedMenu {
         setLocationData(meta, foundShop);
 
         // Preserve custom model data if it exists
-        if (foundShop.getItem().getItemMeta().hasCustomModelData()) {
+        if (foundShop.getItem().getItemMeta() != null && foundShop.getItem().getItemMeta().hasCustomModelData()) {
             meta.setCustomModelData(foundShop.getItem().getItemMeta().getCustomModelData());
         }
 
@@ -484,7 +580,7 @@ public class FoundShopsMenu extends PaginatedMenu {
 
     /**
      * Adds lore to an item representing a shop
-     * 
+     *
      * @param lore      The list to add lore to
      * @param foundShop The shop to create lore for
      */
@@ -517,7 +613,7 @@ public class FoundShopsMenu extends PaginatedMenu {
 
     /**
      * Finds the nearest warp or region to a shop based on the configuration
-     * 
+     *
      * @param foundShop The shop to find the nearest warp/region for
      * @return A string representing the nearest warp/region, or an error message if
      *         none found
@@ -567,7 +663,7 @@ public class FoundShopsMenu extends PaginatedMenu {
 
     /**
      * Sets location data in the item's metadata
-     * 
+     *
      * @param meta      The ItemMeta to set the data on
      * @param foundShop The shop to get location data from
      */
@@ -590,7 +686,7 @@ public class FoundShopsMenu extends PaginatedMenu {
 
     /**
      * Replaces all the placeholders in the Shop item lore in GUI
-     * 
+     *
      * @param text Line of lore
      * @param shop Shop instance
      * @return Line of lore replaced with placeholder values
@@ -642,6 +738,61 @@ public class FoundShopsMenu extends PaginatedMenu {
         return FindItemAddOn.getQsApiInstance().processUnknownStockSpace(shop.getShopLocation(), shop.isToBuy());
     }
 
+    private ItemStack buildItem(Material material, String name, List<String> lore) {
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            meta = Bukkit.getItemFactory().getItemMeta(material);
+        }
+        if (meta == null) {
+            return item;
+        }
+
+        meta.setDisplayName(translate(name));
+        if (lore != null && !lore.isEmpty()) {
+            meta.setLore(lore.stream().map(this::translate).toList());
+        }
+        meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private int getPageCount(int shopCount) {
+        return Math.max(1, (shopCount + SHOPS_PER_PAGE - 1) / SHOPS_PER_PAGE);
+    }
+
+    private void sendFirstPageAlert(Player player) {
+        sendAlert(player, configProvider.SHOP_NAV_FIRST_PAGE_ALERT_MSG);
+    }
+
+    private void sendLastPageAlert(Player player) {
+        sendAlert(player, configProvider.SHOP_NAV_LAST_PAGE_ALERT_MSG);
+    }
+
+    private void sendAlert(Player player, String message) {
+        if (!StringUtils.isEmpty(message)) {
+            PlayerUtil.sendMessage(player, configProvider.PLUGIN_PREFIX + message);
+        }
+    }
+
+    private String prettify(Material material) {
+        if (material == null) {
+            return "Unknown";
+        }
+        String[] words = material.name().toLowerCase(Locale.ROOT).split("_");
+        StringBuilder builder = new StringBuilder();
+        for (String word : words) {
+            if (word.isEmpty()) {
+                continue;
+            }
+            if (!builder.isEmpty()) {
+                builder.append(' ');
+            }
+            builder.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+        }
+        return builder.toString();
+    }
+
     private String replaceDelayPlaceholder(String tpDelayMsg, long delay) {
         return tpDelayMsg.replace("{DELAY}", String.valueOf(delay));
     }
@@ -671,5 +822,9 @@ public class FoundShopsMenu extends PaginatedMenu {
                 .replace(CustomCmdPlaceholdersEnum.SHOP_LOC_Y.value(), Double.toString(shopLoc.getY()))
                 .replace(CustomCmdPlaceholdersEnum.SHOP_LOC_Z.value(), Double.toString(shopLoc.getZ()))
                 .replace(CustomCmdPlaceholdersEnum.SHOP_WORLD.value(), shopLoc.getWorld().getName());
+    }
+
+    private String translate(String text) {
+        return ColorTranslator.translateColorCodes(text);
     }
 }

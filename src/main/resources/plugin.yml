@@ -14,9 +14,15 @@ softdepend:
   - Residence
   - BentoBox
 
+commands:
+  qss:
+    description: Browse every QuickShop shop and teleport to one using an interactive GUI
+    usage: /qss
+    permission: finditem.use
+
 permissions:
   finditem.use:
-    description: Enables players to use the /finditem command
+    description: Enables players to use the /finditem command and the /qss shop browser
     default: true
   finditem.hideshop:
     description: Enables players to use the /finditem hideshop & /finditem revealshop
@@ -34,7 +40,7 @@ permissions:
     description: Allows teleporting to own shops
     default: true
   finditem.shoptp-delay.bypass:
-    description: Bypass the TP delay for teleporting to shop
+    description: Skip the teleport countdown and teleport to the shop instantly
     default: op
   finditem.shoptp.bypass-safetycheck:
     description: Bypass safe location check when teleporting to the shop
